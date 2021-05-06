@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <title>RGB-Depthify</title>
+        <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@1.7.4/dist/tf.min.js"></script>
+        <style>
+            div {
+                text-align: center;
+                width: 100vw;
+                height: 100vh;
+                font-family: Sans-Serif;
+            }
+            .highlight {
+                background-color: #51cb20;
+            }
+        </style>
+    </head>
+
+    <body>
+        <div id="dropArea">
+            <input type="file" id="imageLoader" accept="image/*" /><br />
+            <p id="welcome">Choose (or drag&drop) a photo you wish to RGB-Depthify.</p>
+            <p id="running" style="display: none;">Running. Please wait.</p>
+            <canvas id="resultCanvas" style="max-width: 50%; max-height: 50%;"></canvas>
+        </div>
+        <script>
+            document.getElementById("imageLoader").addEventListener("change", runInference, false);
+
+            let dropArea = document.getElementById("dropArea");
+            ["dragenter", "dragover", "dragleave", "drop"].forEach((eventName) => {
+                dropArea.addEventListener(eventName, preventDefaults, false);
+            });
+            ["dragenter", "dragover"].forEach((eventName) => {
+                dropArea.addEventListener(eventName, highlight, false);
+            });
+            ["dragleave", "drop"].forEach((eventName) => {
+                dropArea.addEventListener(eventName, unhighlight, false);
+            });
+
+            function highlight(e) {
+                dropArea.classList.add("highlight");
+            }
+
+            function unhighlight(e) {
+                dropArea.classList.remove("highlight");
+            }
+
+            dropArea.addEventListener("drop", runInference, false);
+
+            let dropName;
+
+            function preventDefaults(e) {
+                e.preventDefault();
+                e.stopPropagation();
+            }
+
+            if (!("createImageBitmap" in window)) {
+                window.createImageBitmap = async function (data) {
+                    return new Promise((resolve, reject) => {
+                        let dataURL;
+                        const canvas = document.createElement("canvas");
+                        const ctx = canvas.getContext("2d");
+                        canvas.width = data.width;
+                        canvas.height = data.height;
+                        ctx.putImageData(data, 0, 0);
+                        dataURL = canvas.toDataURL();
+
+                        const img = document.createElement("img");
+                        img.addEventListener("load", function () {
+                            resolve(this);
+                        });
+                        img.src = dataURL;
+                    });
+                };
+            }
+
+            class Pydnet {
+                async init(urls) {
+                    const MODEL = "https://raw.githubusercontent.com/FilippoAleotti/demo_live/master/assets/js/pydnet.json";
+                    this.model = await tf.loadGraphModel(MODEL);
+                    this.height = 384;
+                    this.width = 640;
+                    return this;
+                }
+
+                async predict(img) {
+                    const [data, resizeInputData] = tf.tidy(() => {
+                        var raw_input = tf.browser.fromPixels(img);
+                        var upsampledraw_input = tf.image.resizeBilinear(raw_input, [this.height, this.width]);
+                        var preprocessedInput = upsampledraw_input.expandDims();
+                        preprocessedInput = tf.div(preprocessedInput, 255.0);
+                        var result = this.model.predict(preprocessedInput);
+                        result = this.prepareOutput(result, img.width, img.height);
+                        upsampledraw_input = tf.cast(upsampledraw_input, "int32");
+                        const data = result.dataSync();
+                        const resizeInputData = upsampledraw_input.dataSync();
+                        return [data, resizeInputData];
+                    });
+                    await tf.nextFrame();
+                    return [data, resizeInputData];
+                }
+
+                prepareOutput(tensor, width, height) {
+                    return tf.tidy(() => {
+                        tensor = tf.relu(tensor);
+                        tensor = tf.squeeze(tensor);
+                        var min_value = tf.min(tensor);
+                        var max_value = tf.max(tensor);
+                        tensor = tf.div(tf.sub(tensor, min_value), tf.sub(max_value, min_value));
+                        tensor = tf.mul(tensor, 255.0);
+                        tensor = tf.cast(tensor, "int32");
+                        return tensor;
+                    });
+                }
+            }
+
+            async function runInference(e) {
+                document.getElementById("welcome").style.display = "none";
+                document.getElementById("running").style.display = "block";
+                var fr = new FileReader();
+                fr.onload = function () {
+                    var img = new Image();
+                    img.onload = function () {
+                        display_result(img);
+                    };
+                    img.src = fr.result;
+                };
+                try {
+                    fr.readAsDataURL(e.target.files[0]);
+                } catch (x) {
+                    dropName = e.dataTransfer.files[0].name;
+                    fr.readAsDataURL(e.dataTransfer.files[0]);
+                }
+            }
+
+            async function run_inference(img) {
+                var outputs = await model.predict(img);
+                return outputs;
+            }
+
+            async function display_result(img) {
+                var results = await run_inference(img);
+
+                var canvas = document.getElementById("resultCanvas");
+                var ctx = canvas.getContext("2d");
+                canvas.width = img.width * 2;
+                canvas.height = img.height;
+                ctx.drawImage(img, 0, 0);
+
+                var buffer = new Uint8ClampedArray(model.width * model.height * 4);
+                var i = 0;
+                for (var y = 0; y < model.height; y++) {
+                    for (var x = 0; x < model.width; x++) {
+                        var index = y * model.width + x;
+                        var depth = results[0][index];
+                        buffer[i] = results[0][index];
+                        buffer[i + 1] = results[0][index];
+                        buffer[i + 2] = results[0][index];
+                        buffer[i + 3] = 255.0;
+                        i += 4;
+                    }
+                }
+
+                const imageData = new ImageData(buffer, model.width, model.height);
+                createImageBitmap(imageData).then((renderer) => ctx.drawImage(renderer, img.width, 0, img.width, img.height));
+
+                document.getElementById("welcome").style.display = "block";
+                document.getElementById("running").style.display = "none";
+
+                setTimeout(function () {
+                    try {
+                        var ulName = document.getElementById("imageLoader").files.item(0).name;
+                        var dlName = ulName.substr(0, ulName.lastIndexOf(".")) + "_RGBD.png";
+                    } catch (x) {
+                        var dlName = dropName.substr(0, dropName.lastIndexOf(".")) + "_RGBD.png";
+                    }
+
+                    var dlLink = document.createElement("a");
+                    dlLink.download = dlName;
+                    dlLink.href = canvas.toDataURL("image/png");
+                    document.body.appendChild(dlLink);
+                    dlLink.click();
+                    document.body.removeChild(dlLink);
+                }, 500);
+            }
+
+            async function setupPydnet() {
+                model = await new Pydnet().init();
+            }
+
+            setupPydnet();
+        </script>
+    </body>
+</html>

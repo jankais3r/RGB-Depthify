@@ -5,6 +5,9 @@
         <title>RGB-Depthify</title>
         <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@1.7.4/dist/tf.min.js"></script>
         <style>
+            body {
+                margin: 0;
+            }
             div {
                 text-align: center;
                 width: 100vw;
@@ -25,9 +28,10 @@
             <canvas id="resultCanvas" style="max-width: 50%; max-height: 50%;"></canvas>
         </div>
         <script>
-            document.getElementById("imageLoader").addEventListener("change", runInference, false);
-
             let dropArea = document.getElementById("dropArea");
+            dropArea.addEventListener("drop", runInference, false);
+            document.getElementById("imageLoader").addEventListener("change", switchDisplay, false);
+            
             ["dragenter", "dragover", "dragleave", "drop"].forEach((eventName) => {
                 dropArea.addEventListener(eventName, preventDefaults, false);
             });
@@ -37,6 +41,11 @@
             ["dragleave", "drop"].forEach((eventName) => {
                 dropArea.addEventListener(eventName, unhighlight, false);
             });
+            
+            function preventDefaults(e) {
+                e.preventDefault();
+                e.stopPropagation();
+            }
 
             function highlight(e) {
                 dropArea.classList.add("highlight");
@@ -45,15 +54,17 @@
             function unhighlight(e) {
                 dropArea.classList.remove("highlight");
             }
-
-            dropArea.addEventListener("drop", runInference, false);
+            
+            function switchDisplay(e){
+                document.getElementById("welcome").style.display = "none";
+                document.getElementById("running").style.display = "block";
+                setTimeout(function () {
+                    runInference(e);
+                }, 350);
+                
+            }
 
             let dropName;
-
-            function preventDefaults(e) {
-                e.preventDefault();
-                e.stopPropagation();
-            }
 
             if (!("createImageBitmap" in window)) {
                 window.createImageBitmap = async function (data) {
@@ -118,6 +129,7 @@
             async function runInference(e) {
                 document.getElementById("welcome").style.display = "none";
                 document.getElementById("running").style.display = "block";
+
                 var fr = new FileReader();
                 fr.onload = function () {
                     var img = new Image();
@@ -182,7 +194,7 @@
                     document.body.appendChild(dlLink);
                     dlLink.click();
                     document.body.removeChild(dlLink);
-                }, 500);
+                }, 350);
             }
 
             async function setupPydnet() {

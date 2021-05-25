@@ -183,14 +183,14 @@
                 setTimeout(function () {
                     try {
                         var ulName = document.getElementById("imageLoader").files.item(0).name;
-                        var dlName = ulName.substr(0, ulName.lastIndexOf(".")) + "_RGBD.png";
+                        var dlName = ulName.substr(0, ulName.lastIndexOf(".")) + "_RGBD.jpg";
                     } catch (x) {
-                        var dlName = dropName.substr(0, dropName.lastIndexOf(".")) + "_RGBD.png";
+                        var dlName = dropName.substr(0, dropName.lastIndexOf(".")) + "_RGBD.jpg";
                     }
 
                     var dlLink = document.createElement("a");
                     dlLink.download = dlName;
-                    dlLink.href = canvas.toDataURL("image/png");
+                    dlLink.href = canvas.toDataURL("image/jpg");
                     document.body.appendChild(dlLink);
                     dlLink.click();
                     document.body.removeChild(dlLink);

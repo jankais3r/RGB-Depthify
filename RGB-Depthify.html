@@ -190,7 +190,7 @@
 
                     var dlLink = document.createElement("a");
                     dlLink.download = dlName;
-                    dlLink.href = canvas.toDataURL("image/jpg");
+                    dlLink.href = canvas.toDataURL("image/jpeg");
                     document.body.appendChild(dlLink);
                     dlLink.click();
                     document.body.removeChild(dlLink);
